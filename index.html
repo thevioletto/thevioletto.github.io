@@ -12,6 +12,76 @@
     <meta name="apple-mobile-web-app-title" content="Portfolio" />
     <link rel="apple-touch-icon" href="public/favicon.ico" />
     <link rel="stylesheet" href="public/style.css" />
+    <script>
+      (() => {
+        const isLocalhost =
+          window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1';
+        const storageKey = 'violetto:console-enabled';
+        const originalConsole = {
+          log: console.log.bind(console),
+          info: console.info.bind(console),
+          debug: console.debug.bind(console),
+          warn: console.warn.bind(console)
+        };
+
+        function getStoredValue() {
+          try {
+            return window.localStorage.getItem(storageKey);
+          } catch {
+            return null;
+          }
+        }
+
+        function setStoredValue(enabled) {
+          try {
+            window.localStorage.setItem(storageKey, enabled ? 'true' : 'false');
+          } catch {
+            // Ignore storage access failures.
+          }
+        }
+
+        function applyConsoleState(enabled) {
+          const nextMethod = enabled ? null : () => {};
+          console.log = nextMethod || originalConsole.log;
+          console.info = nextMethod || originalConsole.info;
+          console.debug = nextMethod || originalConsole.debug;
+          console.warn = nextMethod || originalConsole.warn;
+        }
+
+        function isEnabled() {
+          if (isLocalhost) {
+            return true;
+          }
+
+          return getStoredValue() === 'true';
+        }
+
+        window.__consoleLogging = {
+          enable() {
+            setStoredValue(true);
+            applyConsoleState(true);
+            originalConsole.log('Console logging enabled');
+          },
+          disable() {
+            setStoredValue(false);
+            applyConsoleState(false);
+          },
+          status() {
+            return {
+              enabled: isEnabled(),
+              storageKey
+            };
+          }
+        };
+
+        window.enableConsoleLogging = () => window.__consoleLogging.enable();
+        window.disableConsoleLogging = () => window.__consoleLogging.disable();
+        window.consoleLoggingStatus = () => window.__consoleLogging.status();
+
+        applyConsoleState(isEnabled());
+      })();
+    </script>
     <script type="module" src="public/script.js" defer></script>
     <script>
       if (

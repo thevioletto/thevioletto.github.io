@@ -251,10 +251,18 @@ export async function initializeGitHubHeatmap(githubConfig) {
     oneYearAgo.setDate(oneYearAgo.getDate() - 364); // 364 to get 365 days total
     oneYearAgo.setHours(0, 0, 0, 0);
 
-    // Generate all dates in range
+    // Pad the calendar to full weeks so month labels can align to week columns.
+    const displayStart = new Date(oneYearAgo);
+    displayStart.setDate(displayStart.getDate() - displayStart.getDay());
+    displayStart.setHours(0, 0, 0, 0);
+
+    const displayEnd = new Date(today);
+    displayEnd.setDate(displayEnd.getDate() + (6 - displayEnd.getDay()));
+    displayEnd.setHours(23, 59, 59, 999);
+
     const allDates = [];
-    const currentDate = new Date(oneYearAgo);
-    while (currentDate <= today) {
+    const currentDate = new Date(displayStart);
+    while (currentDate <= displayEnd) {
       allDates.push(new Date(currentDate));
       currentDate.setDate(currentDate.getDate() + 1);
     }
@@ -262,20 +270,7 @@ export async function initializeGitHubHeatmap(githubConfig) {
     // Clear loading state and render graph
     heatmapElement.innerHTML = `
       <div class="graph">
-        <ul class="months">
-          <li>Jan</li>
-          <li>Feb</li>
-          <li>Mar</li>
-          <li>Apr</li>
-          <li>May</li>
-          <li>Jun</li>
-          <li>Jul</li>
-          <li>Aug</li>
-          <li>Sep</li>
-          <li>Oct</li>
-          <li>Nov</li>
-          <li>Dec</li>
-        </ul>
+        <ul class="months"></ul>
         <ul class="days">
           <li>Sun</li>
           <li>Mon</li>
@@ -290,8 +285,12 @@ export async function initializeGitHubHeatmap(githubConfig) {
       <div class="graph-tooltip" id="graph-tooltip"></div>
     `;
 
+    const monthsContainer = heatmapElement.querySelector('.months');
     const squaresContainer = heatmapElement.querySelector('.squares');
     const tooltip = heatmapElement.querySelector('#graph-tooltip');
+
+    const totalWeeks = Math.ceil(allDates.length / 7);
+    monthsContainer.style.gridTemplateColumns = `repeat(${totalWeeks}, var(--week-width))`;
 
     // Function to get contribution level (0-4)
     function getLevel(count) {
@@ -313,25 +312,50 @@ export async function initializeGitHubHeatmap(githubConfig) {
       });
     }
 
-    // Find the first Sunday before or on the start date to align weeks properly
-    const firstDate = allDates[0];
-    const firstDayOfWeek = firstDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Label each month at the first week where that month appears in-range.
+    let previousMonth = -1;
+    for (let weekIndex = 0; weekIndex < totalWeeks; weekIndex++) {
+      const weekDates = allDates.slice(weekIndex * 7, weekIndex * 7 + 7);
+      const firstInRangeDate = weekDates.find(
+        (date) => date >= oneYearAgo && date <= today
+      );
 
-    // Add empty squares for days before the start date in the first week (Sunday = 0)
-    for (let i = 0; i < firstDayOfWeek; i++) {
-      const emptySquare = document.createElement('li');
-      emptySquare.setAttribute('data-level', '0');
-      emptySquare.style.visibility = 'hidden';
-      squaresContainer.appendChild(emptySquare);
+      if (!firstInRangeDate) {
+        continue;
+      }
+
+      const month = firstInRangeDate.getMonth();
+      if (month === previousMonth) {
+        continue;
+      }
+
+      previousMonth = month;
+
+      const monthLabel = document.createElement('li');
+      monthLabel.textContent = firstInRangeDate.toLocaleDateString('en-US', {
+        month: 'short'
+      });
+      monthLabel.style.gridColumn = `${weekIndex + 1}`;
+      monthsContainer.appendChild(monthLabel);
     }
 
     // Generate squares for actual dates
     allDates.forEach((date) => {
+      const square = document.createElement('li');
+      const isOutOfRange = date < oneYearAgo || date > today;
+
+      if (isOutOfRange) {
+        square.setAttribute('data-level', '0');
+        square.style.visibility = 'hidden';
+        square.setAttribute('aria-hidden', 'true');
+        squaresContainer.appendChild(square);
+        return;
+      }
+
       const dateKey = date.toISOString().split('T')[0];
       const count = contributionMap.get(dateKey) || 0;
       const level = getLevel(count);
 
-      const square = document.createElement('li');
       square.setAttribute('data-level', level);
       square.setAttribute('data-date', dateKey);
       square.setAttribute('data-count', count);

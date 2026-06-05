@@ -592,39 +592,16 @@ button {
       .months {
         grid-area: months;
         display: grid;
-        grid-template-columns:
-          calc(var(--week-width) * 4)
-          /* Jan */
-          calc(var(--week-width) * 4)
-          /* Feb */
-          calc(var(--week-width) * 4)
-          /* Mar */
-          calc(var(--week-width) * 5)
-          /* Apr */
-          calc(var(--week-width) * 4)
-          /* May */
-          calc(var(--week-width) * 4)
-          /* Jun */
-          calc(var(--week-width) * 5)
-          /* Jul */
-          calc(var(--week-width) * 4)
-          /* Aug */
-          calc(var(--week-width) * 4)
-          /* Sep */
-          calc(var(--week-width) * 5)
-          /* Oct */
-          calc(var(--week-width) * 4)
-          /* Nov */
-          calc(var(--week-width) * 5)
-          /* Dec */
-        ;
+        grid-auto-flow: column;
+        grid-auto-columns: var(--week-width);
         list-style: none;
         padding: 0;
         margin: 0;
         color: var(--text-secondary);
 
         li {
-          text-align: center;
+          text-align: left;
+          white-space: nowrap;
         }
       }
 
