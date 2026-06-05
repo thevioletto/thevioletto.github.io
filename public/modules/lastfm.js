@@ -1,8 +1,14 @@
 import { getTimeAgo, escapeHtml } from './utils.js';
+import { logger } from './logger.js';
 
 export async function fetchLastFmTracks(lastfmConfig) {
   const widget = document.getElementById('lastfm-widget');
   if (!widget) return;
+
+  logger.info('[lastfm] widget initialization started', {
+    username: lastfmConfig.username,
+    limit: lastfmConfig.limit
+  });
 
   // Show loading state
   widget.innerHTML = `
@@ -13,6 +19,7 @@ export async function fetchLastFmTracks(lastfmConfig) {
   `;
 
   if (!lastfmConfig.apiKey || lastfmConfig.apiKey === 'YOUR_LASTFM_API_KEY') {
+    logger.warn('[lastfm] missing API key');
     widget.innerHTML = `
       <div class="error-state">
         <img src="./public/assets/nuko-cry-2.gif" alt="Error" class="error-gif" />
@@ -24,6 +31,9 @@ export async function fetchLastFmTracks(lastfmConfig) {
 
   try {
     const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${lastfmConfig.username}&api_key=${lastfmConfig.apiKey}&format=json&limit=${lastfmConfig.limit}`;
+    logger.debug('[lastfm] request', {
+      url
+    });
 
     const response = await fetch(url, {
       cache: 'no-store', // Prevent browser caching
@@ -33,15 +43,21 @@ export async function fetchLastFmTracks(lastfmConfig) {
       }
     });
     const data = await response.json();
+    logger.debug('[lastfm] response received', {
+      hasError: Boolean(data.error)
+    });
 
     if (data.error) {
       throw new Error(data.message);
     }
 
     const tracks = data.recenttracks.track;
+    logger.info('[lastfm] tracks loaded', {
+      count: Array.isArray(tracks) ? tracks.length : tracks ? 1 : 0
+    });
     displayLastFmTracks(tracks);
   } catch (error) {
-    console.error('Last.fm error:', error);
+    logger.error('Last.fm error:', error);
     widget.innerHTML = `
       <div class="error-state">
         <img src="./public/assets/nuko-cry-2.gif" alt="Error" class="error-gif" />
@@ -57,6 +73,9 @@ function displayLastFmTracks(tracks) {
 
   // Normalize tracks to array
   const tracksArray = Array.isArray(tracks) ? tracks : tracks ? [tracks] : [];
+  logger.debug('[lastfm] normalized track payload', {
+    count: tracksArray.length
+  });
 
   if (!tracksArray || tracksArray.length === 0) {
     widget.innerHTML = `
@@ -76,6 +95,10 @@ function displayLastFmTracks(tracks) {
   const tracksToDisplay = hasNowPlaying
     ? tracksArray.filter((track) => track['@attr'] && track['@attr'].nowplaying)
     : tracksArray;
+  logger.info('[lastfm] rendering tracks', {
+    nowPlayingOnly: hasNowPlaying,
+    renderedCount: tracksToDisplay.length
+  });
 
   widget.innerHTML = tracksToDisplay
     .map((track) => {

@@ -1,4 +1,5 @@
 import { parseLinkHeader } from './utils.js';
+import { logger } from './logger.js';
 
 function getGitHubHeaders(githubConfig) {
   const headers = {
@@ -18,8 +19,18 @@ async function fetchAllPages(url, githubConfig, maxPages = 100) {
   let currentUrl = url;
   let pageCount = 0;
 
+  logger.debug('[github] fetchAllPages:start', {
+    url,
+    maxPages
+  });
+
   while (currentUrl && pageCount < maxPages) {
     try {
+      logger.debug('[github] fetchAllPages:request', {
+        page: pageCount + 1,
+        url: currentUrl
+      });
+
       const response = await fetch(currentUrl, {
         headers: getGitHubHeaders(githubConfig)
       });
@@ -32,11 +43,11 @@ async function fetchAllPages(url, githubConfig, maxPages = 100) {
 
           if (remaining === '0') {
             const resetDate = new Date(parseInt(resetTime) * 1000);
-            console.warn(
+            logger.warn(
               `GitHub API rate limit reached. Limit: ${limit}/hour. Resets at: ${resetDate.toLocaleString()}`
             );
           } else {
-            console.warn(
+            logger.warn(
               `GitHub API rate limit. Remaining: ${remaining}/${limit}`
             );
           }
@@ -44,7 +55,7 @@ async function fetchAllPages(url, githubConfig, maxPages = 100) {
         }
 
         if (response.status === 401) {
-          console.error(
+          logger.error(
             'GitHub API authentication failed. Please check your token.'
           );
           break;
@@ -55,10 +66,18 @@ async function fetchAllPages(url, githubConfig, maxPages = 100) {
 
       const items = await response.json();
       if (!Array.isArray(items)) {
+        logger.warn('[github] fetchAllPages:non-array-response', {
+          page: pageCount + 1
+        });
         break;
       }
 
       allItems.push(...items);
+      logger.debug('[github] fetchAllPages:page-complete', {
+        page: pageCount + 1,
+        itemCount: items.length,
+        accumulatedCount: allItems.length
+      });
 
       const linkHeader = response.headers.get('Link');
       currentUrl = parseLinkHeader(linkHeader);
@@ -69,10 +88,15 @@ async function fetchAllPages(url, githubConfig, maxPages = 100) {
         break;
       }
     } catch (error) {
-      console.error('Error fetching page:', error);
+      logger.error('Error fetching page:', error);
       break;
     }
   }
+
+  logger.debug('[github] fetchAllPages:done', {
+    totalPages: pageCount,
+    totalItems: allItems.length
+  });
 
   return allItems;
 }
@@ -87,7 +111,14 @@ async function fetchUserRepositories(username, githubConfig) {
     url = `https://api.github.com/users/${username}/repos?per_page=100&sort=updated`;
   }
 
+  logger.info('[github] fetching repositories', {
+    username,
+    authenticated: hasToken
+  });
   const repos = await fetchAllPages(url, githubConfig, 10);
+  logger.info('[github] repositories loaded', {
+    count: repos.length
+  });
   return repos;
 }
 
@@ -102,20 +133,35 @@ async function fetchRepositoryCommits(
   const url = `https://api.github.com/repos/${owner}/${repo}/commits?since=${sinceISO}&author=${authorUsername}&per_page=100`;
 
   try {
+    logger.debug('[github] fetching repo commits', {
+      repository: `${owner}/${repo}`,
+      since: sinceISO
+    });
     const commits = await fetchAllPages(url, githubConfig, 10);
+    logger.debug('[github] repo commits loaded', {
+      repository: `${owner}/${repo}`,
+      count: commits.length
+    });
     return commits;
   } catch (error) {
-    console.error(`Error fetching commits from ${repo}:`, error);
+    logger.error(`Error fetching commits from ${repo}:`, error);
     return [];
   }
 }
 
 export async function fetchGitHubContributions(githubConfig) {
   try {
+    logger.info('[github] contribution fetch started', {
+      username: githubConfig.username
+    });
+
     // Try to load from Firebase Realtime Database first
     try {
       const firebaseDbUrl =
         'https://uiux-tutorial-website-default-rtdb.asia-southeast1.firebasedatabase.app/contributions.json';
+      logger.debug('[github] checking Firebase cache', {
+        url: firebaseDbUrl
+      });
       const cachedResponse = await fetch(firebaseDbUrl, {
         cache: 'no-store', // Prevent browser caching
         headers: {
@@ -126,6 +172,9 @@ export async function fetchGitHubContributions(githubConfig) {
       if (cachedResponse.ok) {
         const cachedContributions = await cachedResponse.json();
         if (cachedContributions && Array.isArray(cachedContributions)) {
+          logger.info('[github] using Firebase cache', {
+            days: cachedContributions.length
+          });
           // Convert date strings back to Date objects
           return cachedContributions.map((item) => ({
             date: new Date(item.date),
@@ -133,11 +182,15 @@ export async function fetchGitHubContributions(githubConfig) {
           }));
         }
       }
+      logger.debug('[github] Firebase cache unavailable or invalid', {
+        status: cachedResponse.status
+      });
     } catch (cacheError) {
-      console.log('Firebase data not available, fetching from API...');
+      logger.log('Firebase data not available, fetching from API...');
+      logger.debug('[github] Firebase cache error', cacheError);
     }
 
-    console.log('Fetching from API...');
+    logger.info('[github] fetching from GitHub API');
 
     // Fallback to API if cache doesn't exist
     const username = githubConfig.username;
@@ -147,16 +200,24 @@ export async function fetchGitHubContributions(githubConfig) {
     const oneYearAgo = new Date(today);
     oneYearAgo.setDate(oneYearAgo.getDate() - 365);
     oneYearAgo.setHours(0, 0, 0, 0); // Start of that day
+    logger.debug('[github] contribution date range', {
+      from: oneYearAgo.toISOString(),
+      to: today.toISOString()
+    });
 
     const repos = await fetchUserRepositories(username, githubConfig);
 
     if (repos.length === 0) {
-      console.warn('No repositories found');
+      logger.warn('No repositories found');
       return [];
     }
 
     const maxRepos = Math.min(repos.length, 50);
     const reposToProcess = repos.slice(0, maxRepos);
+    logger.info('[github] processing repositories', {
+      totalRepos: repos.length,
+      reposProcessed: reposToProcess.length
+    });
 
     const allCommits = [];
 
@@ -173,6 +234,13 @@ export async function fetchGitHubContributions(githubConfig) {
         githubConfig
       );
       allCommits.push(...commits);
+      logger.debug('[github] repository processed', {
+        repository: repoFullName,
+        repoIndex: i + 1,
+        totalRepos: reposToProcess.length,
+        commitsAdded: commits.length,
+        runningCommitTotal: allCommits.length
+      });
 
       if (i < reposToProcess.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -202,9 +270,14 @@ export async function fetchGitHubContributions(githubConfig) {
       }
     );
 
+    logger.info('[github] contribution aggregation complete', {
+      commitCount: allCommits.length,
+      activeDays: contributions.length
+    });
+
     return contributions;
   } catch (error) {
-    console.error('Error fetching GitHub contributions:', error);
+    logger.error('Error fetching GitHub contributions:', error);
     return [];
   }
 }
@@ -212,6 +285,8 @@ export async function fetchGitHubContributions(githubConfig) {
 export async function initializeGitHubHeatmap(githubConfig) {
   const heatmapElement = document.getElementById('github-heatmap');
   if (!heatmapElement) return;
+
+  logger.info('[github] heatmap initialization started');
 
   // Show loading state
   heatmapElement.innerHTML = `
@@ -223,8 +298,12 @@ export async function initializeGitHubHeatmap(githubConfig) {
 
   try {
     const contributionData = await fetchGitHubContributions(githubConfig);
+    logger.info('[github] heatmap contribution payload ready', {
+      entries: contributionData?.length || 0
+    });
 
     if (!contributionData || contributionData.length === 0) {
+      logger.warn('[github] heatmap has no contribution data');
       heatmapElement.innerHTML = `
         <div class="error-state">
           <img src="./public/assets/nuko-cry.gif" alt="Error" class="error-gif" />
@@ -242,6 +321,9 @@ export async function initializeGitHubHeatmap(githubConfig) {
           ? item.date.toISOString().split('T')[0]
           : new Date(item.date).toISOString().split('T')[0];
       contributionMap.set(dateKey, item.value);
+    });
+    logger.debug('[github] contribution lookup map created', {
+      days: contributionMap.size
     });
 
     // Calculate date range: from today going back 365 days
@@ -266,6 +348,11 @@ export async function initializeGitHubHeatmap(githubConfig) {
       allDates.push(new Date(currentDate));
       currentDate.setDate(currentDate.getDate() + 1);
     }
+    logger.debug('[github] heatmap date grid generated', {
+      visibleDays: allDates.length,
+      firstDay: allDates[0]?.toISOString(),
+      lastDay: allDates[allDates.length - 1]?.toISOString()
+    });
 
     // Clear loading state and render graph
     heatmapElement.innerHTML = `
@@ -291,6 +378,9 @@ export async function initializeGitHubHeatmap(githubConfig) {
 
     const totalWeeks = Math.ceil(allDates.length / 7);
     monthsContainer.style.gridTemplateColumns = `repeat(${totalWeeks}, var(--week-width))`;
+    logger.debug('[github] heatmap week layout computed', {
+      totalWeeks
+    });
 
     // Function to get contribution level (0-4)
     function getLevel(count) {
@@ -338,8 +428,13 @@ export async function initializeGitHubHeatmap(githubConfig) {
       monthLabel.style.gridColumn = `${weekIndex + 1}`;
       monthsContainer.appendChild(monthLabel);
     }
+    logger.debug('[github] month labels rendered', {
+      count: monthsContainer.children.length
+    });
 
     // Generate squares for actual dates
+    let renderedSquares = 0;
+    let hiddenSquares = 0;
     allDates.forEach((date) => {
       const square = document.createElement('li');
       const isOutOfRange = date < oneYearAgo || date > today;
@@ -349,6 +444,7 @@ export async function initializeGitHubHeatmap(githubConfig) {
         square.style.visibility = 'hidden';
         square.setAttribute('aria-hidden', 'true');
         squaresContainer.appendChild(square);
+        hiddenSquares++;
         return;
       }
 
@@ -403,9 +499,15 @@ export async function initializeGitHubHeatmap(githubConfig) {
       });
 
       squaresContainer.appendChild(square);
+      renderedSquares++;
+    });
+    logger.info('[github] heatmap rendered', {
+      renderedSquares,
+      hiddenSquares,
+      monthLabels: monthsContainer.children.length
     });
   } catch (error) {
-    console.error('GitHub heatmap error:', error);
+    logger.error('GitHub heatmap error:', error);
     heatmapElement.innerHTML = `
       <div class="error-state">
         <img src="./public/assets/nuko-cry.gif" alt="Error" class="error-gif" />
