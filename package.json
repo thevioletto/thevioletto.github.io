@@ -2,6 +2,7 @@
   "name": "violetto-rose-github-io",
   "version": "1.0.0",
   "description": "Personal Github Website",
+  "type": "module",
   "scripts": {
     "sass:build": "sass --no-source-map --style=compressed --load-path=. .:.",
     "sass:watch": "sass --watch --no-source-map --load-path=. .:.",
@@ -15,6 +16,7 @@
     "stylelint-scss": "^6.13.0"
   },
   "dependencies": {
+    "firebase": "^11.6.0",
     "firebase-admin": "^13.6.0"
   }
 }

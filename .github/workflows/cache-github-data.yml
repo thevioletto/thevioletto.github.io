@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Install dependencies
+        run: npm install
+
       - name: Create data directory
         run: mkdir -p public/data
 
@@ -204,11 +207,11 @@ jobs:
           });
 
           const db = getDatabase(app);
-          await db.ref('contributions').set(contributions);
-          console.log('✅ Data uploaded to Firebase!');
-          process.exit(0);
+          async function run() {
+            await db.ref('contributions').set(contributions);
+            console.log('✅ Data uploaded to Firebase!');
+          }
+          run().catch(console.error);
           EOF
 
-          # Install firebase-admin and run the script
-          npm install firebase-admin
           node upload-firebase.js
