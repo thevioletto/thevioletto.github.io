@@ -208,10 +208,16 @@ jobs:
 
           const db = getDatabase(app);
           async function run() {
-            await db.ref('contributions').set(contributions);
-            console.log('✅ Data uploaded to Firebase!');
+            try {
+              await db.ref('contributions').set(contributions);
+              console.log('✅ Data uploaded to Firebase!');
+              process.exit(0);
+            } catch (error) {
+              console.error('❌ Error uploading to Firebase:', error);
+              process.exit(1);
+            }
           }
-          run().catch(console.error);
+          run();
           EOF
 
           node upload-firebase.js
