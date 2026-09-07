@@ -36,7 +36,7 @@ jobs:
         id: fetch-contributions
         env:
           GH_TOKEN: ${{ secrets.GH_API_TOKEN }}
-          GITHUB_USERNAME: 'violetto-rose'
+          GITHUB_USERNAME: 'thevioletto'
         run: |
           node -e "
           const https = require('https');

@@ -27,7 +27,7 @@ jobs:
       - name: Create public config file
         run: |
           echo "export const githubConfig = {
-            username: 'violetto-rose'
+            username: 'thevioletto'
           };
 
           export const lastfmConfig = {

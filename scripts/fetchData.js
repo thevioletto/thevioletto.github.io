@@ -129,7 +129,7 @@ async function uploadToFirebase(contributions) {
 async function fetchContributions() {
   try {
     const token = CONFIG.github.token;
-    const username = CONFIG.github.username || 'violetto-rose';
+    const username = CONFIG.github.username || 'thevioletto';
 
     if (!token || token === 'YOUR_GITHUB_TOKEN_HERE' || token.trim() === '') {
       console.log('⚠️ Skipping contributions (no token)');
