@@ -148,7 +148,7 @@ function displayListenBrainzTrack(track, isNowPlaying, widget) {
     ? 'Now playing'
     : getTimeAgo(track.listened_at);
 
-  const fallbackArt = './public/assets/nuko-vibe.gif';
+  const fallbackArt = './public/assets/nuko-happy-rainbow-2.gif';
 
   widget.innerHTML = `
     <div class="track-item">
