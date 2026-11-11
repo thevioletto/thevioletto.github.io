@@ -1,12 +1,35 @@
 import https from 'https';
-import { initializeApp, cert } from 'firebase-admin/app';
+import { initializeApp } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
+import { JWT } from 'google-auth-library';
 import { githubConfig, firebaseServiceConfig } from '../public/config.js';
 
 const CONFIG = {
   github: githubConfig,
   firebase: firebaseServiceConfig
 };
+
+function createFirebaseCredential(serviceAccount) {
+  const jwt = new JWT({
+    email: serviceAccount.client_email,
+    key: serviceAccount.private_key,
+    scopes: [
+      'https://www.googleapis.com/auth/cloud-platform',
+      'https://www.googleapis.com/auth/firebase.database',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ]
+  });
+
+  return {
+    getAccessToken: async () => {
+      const res = await jwt.getAccessToken();
+      return {
+        access_token: res.token,
+        expires_in: 3600
+      };
+    }
+  };
+}
 
 // Initialize Firebase Admin SDK if service account is available
 let firebaseApp = null;
@@ -15,7 +38,7 @@ let firebaseDb = null;
 if (CONFIG.firebase && CONFIG.firebase.project_id) {
   try {
     firebaseApp = initializeApp({
-      credential: cert(CONFIG.firebase),
+      credential: createFirebaseCredential(CONFIG.firebase),
       databaseURL: `https://${CONFIG.firebase.project_id}-default-rtdb.asia-southeast1.firebasedatabase.app`
     });
     firebaseDb = getDatabase(firebaseApp);
@@ -216,4 +239,11 @@ async function main() {
   console.log('\nDone! Data uploaded to Firebase');
 }
 
-main().catch(console.error);
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

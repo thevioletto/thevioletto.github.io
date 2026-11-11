@@ -30,10 +30,9 @@ jobs:
             username: 'thevioletto'
           };
 
-          export const lastfmConfig = {
-            apiKey: '${{ secrets.LASTFM_API_KEY }}',
-            username: '${{ secrets.LASTFM_USERNAME }}',
-            limit: 1
+          export const listenbrainzConfig = {
+            userToken: '${{ secrets.LISTENBRAINZ_USER_TOKEN }}',
+            username: 'thevioletto'
           };" > public/config.js
 
       - name: Setup Pages
