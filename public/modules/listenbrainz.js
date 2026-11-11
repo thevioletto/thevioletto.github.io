@@ -47,23 +47,24 @@ export async function fetchListenBrainzTracks(listenbrainzConfig = {}) {
       username = 'thevioletto';
     }
 
-    const headers = {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      Pragma: 'no-cache'
-    };
+    const requestOptions = {};
     if (userToken && userToken !== 'YOUR_LISTENBRAINZ_USER_TOKEN') {
-      headers.Authorization = `Token ${userToken}`;
+      requestOptions.headers = {
+        Authorization: `Token ${userToken}`
+      };
     }
+
+    const ts = Date.now();
 
     // First try fetching playing-now track
     let track = null;
     let isNowPlaying = false;
 
-    const playingUrl = `https://api.listenbrainz.org/1/user/${encodeURIComponent(username)}/playing-now`;
+    const playingUrl = `https://api.listenbrainz.org/1/user/${encodeURIComponent(username)}/playing-now?_=${ts}`;
     logger.debug('[listenbrainz] checking playing-now', { url: playingUrl });
 
     try {
-      const playingRes = await fetch(playingUrl, { cache: 'no-store', headers });
+      const playingRes = await fetch(playingUrl, requestOptions);
       if (playingRes.ok) {
         const playingData = await playingRes.json();
         if (playingData?.payload?.listens?.length > 0) {
@@ -78,10 +79,10 @@ export async function fetchListenBrainzTracks(listenbrainzConfig = {}) {
 
     // If not currently playing, fetch the most recent listen
     if (!track) {
-      const listensUrl = `https://api.listenbrainz.org/1/user/${encodeURIComponent(username)}/listens?count=1`;
+      const listensUrl = `https://api.listenbrainz.org/1/user/${encodeURIComponent(username)}/listens?count=1&_=${ts}`;
       logger.debug('[listenbrainz] fetching recent listens', { url: listensUrl });
 
-      const listensRes = await fetch(listensUrl, { cache: 'no-store', headers });
+      const listensRes = await fetch(listensUrl, requestOptions);
       if (!listensRes.ok) {
         throw new Error(`ListenBrainz API error: ${listensRes.status}`);
       }
