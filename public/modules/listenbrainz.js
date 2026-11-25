@@ -104,7 +104,7 @@ export async function fetchListenBrainzTracks(listenbrainzConfig = {}) {
       return;
     }
 
-    displayListenBrainzTrack(track, isNowPlaying, widget);
+    await displayListenBrainzTrack(track, isNowPlaying, widget);
   } catch (error) {
     logger.error('[listenbrainz] error:', error);
     widget.innerHTML = `
@@ -116,7 +116,59 @@ export async function fetchListenBrainzTracks(listenbrainzConfig = {}) {
   }
 }
 
-function displayListenBrainzTrack(track, isNowPlaying, widget) {
+async function resolveAlbumArt(trackMetadata, artistName, trackName) {
+  const mbidMapping = trackMetadata.mbid_mapping;
+  if (mbidMapping?.caa_release_mbid && mbidMapping?.caa_id) {
+    return `https://coverartarchive.org/release/${mbidMapping.caa_release_mbid}/${mbidMapping.caa_id}-250.jpg`;
+  }
+  if (mbidMapping?.release_mbid) {
+    return `https://coverartarchive.org/release/${mbidMapping.release_mbid}/front-250`;
+  }
+
+  const info = trackMetadata.additional_info || {};
+  const spotifyUrl =
+    info.spotify_album_id ||
+    info.spotify_id ||
+    (info.origin_url?.includes('open.spotify.com') ? info.origin_url : null);
+
+  if (spotifyUrl) {
+    try {
+      const res = await fetch(
+        `https://open.spotify.com/oembed?url=${encodeURIComponent(spotifyUrl)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.thumbnail_url) {
+          return data.thumbnail_url;
+        }
+      }
+    } catch (err) {
+      logger.warn('[listenbrainz] Spotify oEmbed cover art lookup failed:', err);
+    }
+  }
+
+  try {
+    const query = [artistName, trackName].filter(Boolean).join(' ');
+    if (query) {
+      const res = await fetch(
+        `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=1`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const artwork = data.results?.[0]?.artworkUrl100;
+        if (artwork) {
+          return artwork.replace('100x100bb', '300x300bb');
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn('[listenbrainz] iTunes cover art lookup failed:', err);
+  }
+
+  return '';
+}
+
+async function displayListenBrainzTrack(track, isNowPlaying, widget) {
   const trackMetadata = track.track_metadata || {};
   const trackName = trackMetadata.track_name || 'Unknown Track';
 
@@ -136,13 +188,7 @@ function displayListenBrainzTrack(track, isNowPlaying, widget) {
   }
 
   // Cover Art resolution
-  const mbidMapping = trackMetadata.mbid_mapping;
-  let imageUrl = '';
-  if (mbidMapping?.caa_release_mbid && mbidMapping?.caa_id) {
-    imageUrl = `https://coverartarchive.org/release/${mbidMapping.caa_release_mbid}/${mbidMapping.caa_id}-250.jpg`;
-  } else if (mbidMapping?.release_mbid) {
-    imageUrl = `https://coverartarchive.org/release/${mbidMapping.release_mbid}/front-250`;
-  }
+  const imageUrl = await resolveAlbumArt(trackMetadata, artistName, trackName);
 
   const timeAgo = isNowPlaying
     ? 'Now playing'
